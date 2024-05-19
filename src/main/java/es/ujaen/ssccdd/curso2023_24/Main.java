@@ -1,31 +1,53 @@
 package es.ujaen.ssccdd.curso2023_24;
 
 import javax.jms.JMSException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+
 import static es.ujaen.ssccdd.curso2023_24.Constantes.*;
 
 public class Main {
 
     public static void main(String[] args) {
+
+        Resultado resultado = new Resultado();
+
         try {
-            // Crear e iniciar el proceso Gestor
-            Gestor gestor = new Gestor();
+            CountDownLatch latch = new CountDownLatch(1);
+
+            Gestor gestor = new Gestor(resultado, latch);
             Thread gestorThread = new Thread(gestor);
             gestorThread.start();
 
-            // Crear e iniciar el proceso Agencia
             Agencia agencia = new Agencia();
             Thread agenciaThread = new Thread(agencia);
             agenciaThread.start();
 
-
-            // Crear e iniciar varios procesos de Usuario
-            /*for (int i = 1; i <= 5; i++) {
+            List<Thread> usuarioThreads = new ArrayList<>();
+            for (int i = 1; i <= 5; i++) {
                 Usuario usuario = new Usuario(i);
                 Thread usuarioThread = new Thread(usuario);
                 usuarioThread.start();
-            }*/
+                usuarioThreads.add(usuarioThread);
+            }
+
+            Thread.sleep(TIEMPO_ESPERA_FINALIZACION);
+            latch.countDown();
+            gestorThread.join();
+
+            agenciaThread.interrupt();
+            for (Thread usuarioThread : usuarioThreads) {
+                usuarioThread.interrupt();
+            }
+
+            resultado.imprimirReservasViaje();
+            resultado.imprimirReservasEstancia();
+
         } catch (JMSException e) {
             e.printStackTrace();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 }

@@ -75,7 +75,7 @@ public class ReservaEstancia implements Runnable, Constantes{
     public void after() {
         try {
             if (connection != null) {
-                //resultado.addReservaEstancia(reservasEEDD);
+                resultado.addReservaEstancia(reservasEEDD);
                 executor.shutdown();
                 connection.close();
             }
@@ -85,13 +85,14 @@ public class ReservaEstancia implements Runnable, Constantes{
     }
 
     public void execution() throws Exception {
-       // System.out.println(" Acceso("+queue+") en ejecución...");
+        System.out.println(" Acceso("+queue+") en ejecución...");
         TextMessage msg;
         consumer = session.createConsumer(session.createTopic(DESTINO_RESERVA_ESTANCIA));
         consumer.setMessageListener(new MensajeListener(colaReserva,"Reserva")); // listener para la cola de reserva
         connection.start();
 
         consumerCancelacion = session.createConsumer(session.createTopic(DESTINO_CANCELACION_RESERVA));
+
         consumerCancelacion.setMessageListener(new MensajeListener(colaCancelacion,"Cancelacion")); // listener para la cola de cancelación
         connection.start();
 
@@ -125,9 +126,18 @@ public class ReservaEstancia implements Runnable, Constantes{
                 procesarMensaje(colaPagoCancelacion, "PagoCancelacion");
             }
 
+            /*
             if (Thread.currentThread().isInterrupted()) {
                 break;
+            }*/
+
+            try {
+                TimeUnit.SECONDS.sleep(2);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
             }
+
+            resultado.addReservaEstancia(reservasEEDD);
 
         }
 
@@ -149,7 +159,6 @@ public class ReservaEstancia implements Runnable, Constantes{
 
         Iterator<String> iterator = cola.iterator();
         if (!cola.isEmpty()) {
-           // System.out.println("Mensajes en la cola: " + cola.size());
             while (i < PRIORIDAD && iterator.hasNext()) { // Procesamos los 5 primeros mensajes en búsqueda de petición de Agencia
                 String mensajeActual = iterator.next(); // iterar sobre la cola
                 tipoCliente = ComprobarReserva(mensajeActual);// Obtengo el tipo de cliente
@@ -335,3 +344,4 @@ public class ReservaEstancia implements Runnable, Constantes{
         TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
     }
 }
+

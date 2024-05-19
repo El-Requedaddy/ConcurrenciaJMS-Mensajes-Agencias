@@ -12,6 +12,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class ReservaViaje implements Runnable, Constantes{
+    Resultado resultado;
     private final String queue;
     private ActiveMQConnectionFactory connectionFactory;
     private Connection connection;
@@ -24,12 +25,16 @@ public class ReservaViaje implements Runnable, Constantes{
     Deque<String> colaPagoCancelacion;
     ExecutorService executor;
     HashMap<Constantes.Viajes, List<Reserva>> reservasEEDD;
+
+    // Mensajería y buffers
     MessageConsumer consumer;
     MessageConsumer consumerCancelacion;
+    private MessageProducer producerConsultaDisponibilidadViaje;
+    private MessageProducer producerConsultaDisponibilidadEstancia;
     Lock lock;
     private MessageProducer producerRespuestaDisponibilidad;
 
-    public ReservaViaje(String queue) throws JMSException {
+    public ReservaViaje(String queue, Resultado resultado) throws JMSException {
         this.queue = queue;
         this.colaReserva = new LinkedList<>();
         this.colaCancelacion = new LinkedList<>();
@@ -44,6 +49,19 @@ public class ReservaViaje implements Runnable, Constantes{
         reservasEEDD.put(Viajes.VIAJE3, new ArrayList<>());
         reservasEEDD.put(Viajes.VIAJE4, new ArrayList<>());
         reservasEEDD.put(Viajes.VIAJE5, new ArrayList<>());
+        this.resultado = resultado;
+
+        ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory(ActiveMQConnection.DEFAULT_BROKER_URL);
+        connection = connectionFactory.createConnection();
+        session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+
+        Destination destinationCancelacionReservaViaje = session.createTopic(DESTINO_RESPUESTA_CONSULTA_DISPONIBILIDAD_VIAJE);
+        producerConsultaDisponibilidadViaje = session.createProducer(destinationCancelacionReservaViaje);
+
+        Destination destinationCancelacionReservaEstancia = session.createTopic(DESTINO_RESPUESTA_CONSULTA_DISPONIBILIDAD_ESTANCIA);
+        producerConsultaDisponibilidadEstancia = session.createProducer(destinationCancelacionReservaEstancia);
+
+        connection.start();
     }
 
     @Override
@@ -73,6 +91,9 @@ public class ReservaViaje implements Runnable, Constantes{
     public void after() {
         try {
             if (connection != null) {
+                resultado.addReservaViaje(reservasEEDD);
+                executor.shutdown();
+                consumer.close();
                 connection.close();
             }
         } catch (Exception ex) {
@@ -104,7 +125,7 @@ public class ReservaViaje implements Runnable, Constantes{
         connection.start();
 
 
-        while (true) {
+        while (!Thread.currentThread().isInterrupted()) {
             synchronized (colaReserva) {
                 procesarMensaje(colaReserva, "Reserva");
             }
@@ -120,9 +141,15 @@ public class ReservaViaje implements Runnable, Constantes{
             synchronized (colaPagoCancelacion) {
                 procesarMensaje(colaPagoCancelacion, "PagoCancelacion");
             }
+
         }
 
-
+        executor.shutdown();
+        consumer.close();
+        consumerCancelacion.close();
+        consumerPago.close();
+        consumerPagoCancelacion.close();
+        consumerConsulta.close();
 
     }
     private void procesarMensaje(Deque<String> cola, String tipoPeticion) throws JMSException, InterruptedException {
@@ -211,7 +238,6 @@ public class ReservaViaje implements Runnable, Constantes{
         String viaje = partes[3];
         String codigoReserva = partes[4];
 
-
         TareaReservaViaje tarea = new TareaReservaViaje(codigoReserva, tipoCliente, idCliente, reservasEEDD, viaje,lock);
         executor.submit(tarea); // creo una tarea para reservar el viaje
 
@@ -247,7 +273,7 @@ public class ReservaViaje implements Runnable, Constantes{
     }
 
     private void cancelarReserva(String peticionAProcesar) {
-        // lógica para cancelar reserva
+//        // lógica para cancelar reserva
         String[] partes = peticionAProcesar.split("_");
 
         String tipoCliente = partes[0];

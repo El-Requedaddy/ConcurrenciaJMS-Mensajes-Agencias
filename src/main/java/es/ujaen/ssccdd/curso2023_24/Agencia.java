@@ -73,7 +73,7 @@ public class Agencia implements Runnable, Constantes {
 
     public void run() {
         int c = 0;
-        while (!finTarea() && !Thread.currentThread().isInterrupted()) {
+        while (!Thread.currentThread().isInterrupted()) {
             if (quiereReservarViaje()) {
                 executorService.submit(() -> { // Un hilo espera a la respuesta
                     try {
@@ -89,7 +89,7 @@ public class Agencia implements Runnable, Constantes {
                             }
                         }
                     } catch (JMSException | InterruptedException e) {
-                        throw new RuntimeException(e);
+                        Thread.currentThread().interrupt();
                     }
                 });
             } else if (quiereReservarEstancia()) {
@@ -102,7 +102,7 @@ public class Agencia implements Runnable, Constantes {
                             sendReservaEstanciaAgencia("Agencia_Reserva_" + iD + "_" + Constantes.generarViajeAleatorio()+ "_" + "EstanciaCode"+c);
                         }
                     } catch (JMSException | InterruptedException e) {
-                        throw new RuntimeException(e);
+                        Thread.currentThread().interrupt();
                     }
                 });
             }
@@ -127,7 +127,12 @@ public class Agencia implements Runnable, Constantes {
             try {
                 TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_AGENCIA);
             } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+                Thread.currentThread().interrupt();
+            }
+
+            if (Thread.currentThread().isInterrupted()) {
+                executorService.shutdown();
+                break;
             }
         }
 
@@ -174,7 +179,11 @@ public class Agencia implements Runnable, Constantes {
         message.setStringProperty("tipo", "reservaViajeAgencia");
         producerReservaViaje.send(message);
         System.out.println("Agencia: Reserva de viaje enviada");
-        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        try {
+            TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
+        }
     }
 
     private void sendReservaEstanciaAgencia(String reserva) throws JMSException, InterruptedException{
@@ -182,7 +191,11 @@ public class Agencia implements Runnable, Constantes {
         message.setStringProperty("tipo", "reservaEstanciaAgencia");
         producerReservaEstancia.send(message);
         //System.out.println("Agencia: Reserva de estancia enviada");
-        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        try {
+            TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
+        }
     }
 
     private void sendConsultaDisponibilidadViaje(String consulta) throws JMSException, InterruptedException {
@@ -190,7 +203,11 @@ public class Agencia implements Runnable, Constantes {
         message.setStringProperty("tipo", "consultaDisponibilidad");
         producerConsultaDisponibilidadViaje.send(message);
         //System.out.println("Agencia: Reserva de estancia enviada");
-        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        try {
+            TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
+        }
     }
 
     private void sendConsultaDisponibilidadEstancia(String consulta) throws JMSException, InterruptedException {
@@ -198,7 +215,11 @@ public class Agencia implements Runnable, Constantes {
         message.setStringProperty("tipo", "consultaDisponibilidad");
         producerConsultaDisponibilidadEstancia.send(message);
         //System.out.println("Agencia: Reserva de estancia enviada");
-        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        try {
+            TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
+        }
     }
 
     private void sendPagoBasico(String pago) throws JMSException {
