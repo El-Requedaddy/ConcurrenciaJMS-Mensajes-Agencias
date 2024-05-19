@@ -5,6 +5,7 @@ import org.apache.activemq.ActiveMQConnection;
 import org.apache.activemq.ActiveMQConnectionFactory;
 
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class Usuario implements Runnable, Constantes {
@@ -18,16 +19,19 @@ public class Usuario implements Runnable, Constantes {
     private MessageConsumer consumerReservaEstancia;
     private MessageProducer producerReservaViaje;
     private MessageProducer producerReservaEstancia;
+    private MessageProducer producerConsultaDisponibilidadViaje;
+    private MessageProducer producerConsultaDisponibilidadEstancia;
     private ExecutorService executorService;
 
     public Usuario(int id) throws JMSException {
         this.iD = String.valueOf(id);
+        executorService = Executors.newFixedThreadPool(10);
         ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory(ActiveMQConnection.DEFAULT_BROKER_URL);
         connection = connectionFactory.createConnection();
         session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
 
-        consumerReservaEstancia = session.createConsumer(session.createTopic(DESTINO_RESERVA_ESTANCIA));
-        consumerReservaViaje = session.createConsumer(session.createTopic(DESTINO_RESERVA_VIAJE));
+        consumerReservaEstancia = session.createConsumer(session.createTopic(DESTINO_CONSULTA_DISPONIBILIDAD_ESTANCIA));
+        consumerReservaViaje = session.createConsumer(session.createTopic(DESTINO_CONSULTA_DISPONIBILIDAD_VIAJE));
 
         Destination destinationReservaViaje = session.createTopic(DESTINO_RESERVA_VIAJE);
         producerReservaViaje = session.createProducer(destinationReservaViaje);
@@ -35,9 +39,11 @@ public class Usuario implements Runnable, Constantes {
         Destination destinationReservaEstancia = session.createTopic(DESTINO_RESERVA_ESTANCIA);
         producerReservaEstancia = session.createProducer(destinationReservaEstancia);
 
-        Destination destination = session.createQueue(DESTINO);
-        producer = session.createProducer(destination);
-        consumer = session.createConsumer(destination);
+        Destination destinationConsultaDisponibilidadViaje = session.createTopic(DESTINO_CONSULTA_DISPONIBILIDAD_VIAJE);
+        producerConsultaDisponibilidadViaje = session.createProducer(destinationConsultaDisponibilidadViaje);
+
+        Destination destinationConsultaDisponibilidadEstancia = session.createTopic(DESTINO_CONSULTA_DISPONIBILIDAD_ESTANCIA);
+        producerConsultaDisponibilidadEstancia = session.createProducer(destinationConsultaDisponibilidadEstancia);
 
         connection.start();
     }
@@ -48,8 +54,9 @@ public class Usuario implements Runnable, Constantes {
             if (quiereReservarViaje()) {
                 executorService.submit(() -> { // Un hilo espera a la respuesta
                     try {
-                        sendConsultaDisponibilidad(iD + "_" + Constantes.generarViajeAleatorio());
+                        sendConsultaDisponibilidadViaje(iD + "_" + Constantes.generarViajeAleatorio());
                         Message message = consumerReservaViaje.receive();
+                        System.out.println("Usuario: Recibida respuesta de disponibilidad de viaje");
                         if (message instanceof TextMessage && message.getBooleanProperty("respuestaDisponibilidad")) {
                             sendReservaViaje("reservaViaje");
                         }
@@ -60,10 +67,11 @@ public class Usuario implements Runnable, Constantes {
             } else if (quiereReservarEstancia()) {
                 executorService.submit(() -> {
                     try {
-                        sendConsultaDisponibilidad(iD + "_" + Constantes.generarEstanciaAleatoria());
+                        sendConsultaDisponibilidadEstancia(iD + "_" + Constantes.generarEstanciaAleatoria());
                         Message message = consumerReservaEstancia.receive();
+                        System.out.println("Usuario: Recibida respuesta de disponibilidad de estancia");
                         if (message instanceof TextMessage && message.getBooleanProperty("respuestaDisponibilidad")) {
-                            sendReservaViaje("reservaViaje");
+                            sendReservaEstancia("reservaViaje");
                         }
                     } catch (JMSException | InterruptedException e) {
                         throw new RuntimeException(e);
@@ -81,7 +89,7 @@ public class Usuario implements Runnable, Constantes {
 
             // Simulamos tiempo de espera para volver a realizar consultas
             try {
-                TimeUnit.MILLISECONDS.sleep(5000);
+                TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_USUARIO);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
@@ -99,7 +107,7 @@ public class Usuario implements Runnable, Constantes {
     }
 
     private boolean quiereReservarEstancia() {
-        return false; // lógica para determinar si quiere reservar una estancia
+        return true; // lógica para determinar si quiere reservar una estancia
     }
 
     private boolean quiereCancelarReserva() {
@@ -126,10 +134,18 @@ public class Usuario implements Runnable, Constantes {
         TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
     }
 
-    private void sendConsultaDisponibilidad(String consulta) throws JMSException, InterruptedException {
+    private void sendConsultaDisponibilidadViaje(String consulta) throws JMSException, InterruptedException {
         TextMessage message = session.createTextMessage(consulta);
         message.setStringProperty("tipo", "consultaDisponibilidad");
-        producerReservaEstancia.send(message);
+        producerConsultaDisponibilidadViaje.send(message);
+        System.out.println("Usuario: Reserva de viaje enviada");
+        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+    }
+
+    private void sendConsultaDisponibilidadEstancia(String consulta) throws JMSException, InterruptedException {
+        TextMessage message = session.createTextMessage(consulta);
+        message.setStringProperty("tipo", "consultaDisponibilidad");
+        producerConsultaDisponibilidadEstancia.send(message);
         System.out.println("Usuario: Reserva de estancia enviada");
         TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
     }

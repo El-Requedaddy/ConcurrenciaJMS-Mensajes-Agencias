@@ -21,7 +21,8 @@ public interface Constantes {
     public static final String DESTINO_PAGO_CANCELACION = "ssccdd.curso2024.3.pagoCancelacion";
     public static final String DESTINO_CONSULTA_DISPONIBILIDAD_VIAJE = "ssccdd.curso2024.3.consultaDisponibilidadViaje";
     public static final String DESTINO_CONSULTA_DISPONIBILIDAD_ESTANCIA = "ssccdd.curso2024.3.consultaDisponibilidadEstancia";
-    public static final String DESTINO_CANCELACION_RESERVA = "ssccdd.curso2024.3.cancelacionReserva";
+    public static final String DESTINO_CANCELACION_RESERVA_VIAJE = "ssccdd.curso2024.3.cancelacionReservaViaje";
+    public static final String DESTINO_CANCELACION_RESERVA_ESTANCIA = "ssccdd.curso2024.3.cancelacionReservaEstancia";
 
     public enum Viajes {
         VIAJE1("VIAJE A JAÉN", 3),
