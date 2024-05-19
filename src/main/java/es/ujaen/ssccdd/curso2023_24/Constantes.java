@@ -23,8 +23,8 @@ public interface Constantes {
     public static final String DESTINO_CONSULTA_DISPONIBILIDAD_ESTANCIA = "ssccdd.curso2024.3.consultaDisponibilidadEstancia";
     public static final String DESTINO_RESPUESTA_CONSULTA_DISPONIBILIDAD_VIAJE = "ssccdd.curso2024.3.respuestaConsultaDisponibilidadViaje";
     public static final String DESTINO_RESPUESTA_CONSULTA_DISPONIBILIDAD_ESTANCIA = "ssccdd.curso2024.3.respuestaConsultaDisponibilidadEstancia";
-    public static final String DESTINO_CANCELACION_RESERVA_VIAJE = "ssccdd.curso2024.3.cancelacionReservaViaje";
-    public static final String DESTINO_CANCELACION_RESERVA_ESTANCIA = "ssccdd.curso2024.3.cancelacionReservaEstancia";
+    public static final String DESTINO_CANCELACION_RESERVA = "ssccdd.curso2024.3.cancelacionReservaViaje";
+    //public static final String DESTINO_CANCELACION_RESERVA_ESTANCIA = "ssccdd.curso2024.3.cancelacionReservaEstancia";
     public static final int PRIORIDAD = 5;
 
     public enum Viajes {

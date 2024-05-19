@@ -27,6 +27,7 @@ public class ReservaViaje implements Runnable, Constantes{
     MessageConsumer consumer;
     MessageConsumer consumerCancelacion;
     Lock lock;
+    private MessageProducer producerRespuestaDisponibilidad;
 
     public ReservaViaje(String queue) throws JMSException {
         this.queue = queue;
@@ -65,6 +66,8 @@ public class ReservaViaje implements Runnable, Constantes{
         connection = connectionFactory.createConnection();
         session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
         destination = session.createTopic(queue);
+        Destination destinationRespuestaDisponibilidad = session.createTopic(DESTINO_RESPUESTA_CONSULTA_DISPONIBILIDAD_VIAJE);
+        producerRespuestaDisponibilidad = session.createProducer(destinationRespuestaDisponibilidad);
     }
 
     public void after() {
@@ -84,7 +87,7 @@ public class ReservaViaje implements Runnable, Constantes{
         consumer.setMessageListener(new MensajeListener(colaReserva,"Reserva")); // listener para la cola de reserva
         connection.start();
 
-        consumerCancelacion = session.createConsumer(session.createTopic(DESTINO_CANCELACION_RESERVA_VIAJE));
+        consumerCancelacion = session.createConsumer(session.createTopic(DESTINO_CANCELACION_RESERVA));
         consumerCancelacion.setMessageListener(new MensajeListener(colaCancelacion,"Cancelacion")); // listener para la cola de cancelación
         connection.start();
 
@@ -109,7 +112,7 @@ public class ReservaViaje implements Runnable, Constantes{
                 procesarMensaje(colaCancelacion, "Cancelacion");
             }
             synchronized (colaPago) {
-                procesarMensaje(colaPago, "Pago");
+                procesarMensaje(colaPago, "PagoBasico");
             }
             synchronized (colaConsulta) {
                 procesarMensaje(colaConsulta, "Consulta");
@@ -170,13 +173,20 @@ public class ReservaViaje implements Runnable, Constantes{
                 reservarViaje(peticionAProcesar);
                 break;
             case "Cancelacion":
-                System.out.println("Cancelación de reserva: ");
+                cancelarReserva(peticionAProcesar);
+                //System.out.println("Cancelación de reserva: ");
                 break;
             case "Consulta":
-                System.out.println("Consulta de disponibilidad: ");
+                consultarDisponibilidad(peticionAProcesar);
+                //System.out.println("Consulta de disponibilidad: ");
                 break;
-            case "Pago":
-                System.out.println("Pago básico: ");
+            case "PagoBasico":
+                efectuarPago(peticionAProcesar);
+                //System.out.println("Pago básico: ");
+                break;
+            case "PagoCancelacion":
+                efectuarPago(peticionAProcesar);
+                //System.out.println("Pago básico: ");
                 break;
             default:
                 System.out.println("Petición no reconocida");
@@ -199,14 +209,44 @@ public class ReservaViaje implements Runnable, Constantes{
         String tipoPeticion = partes[1];
         String idCliente = partes[2];
         String viaje = partes[3];
-        String codigoReserva = UUID.randomUUID().toString();
+        String codigoReserva = partes[4];
 
-        TareaReservaViaje tarea = new TareaReservaViaje(codigoReserva, tipoCliente, idCliente, reservasEEDD, viaje);
+
+        TareaReservaViaje tarea = new TareaReservaViaje(codigoReserva, tipoCliente, idCliente, reservasEEDD, viaje,lock);
         executor.submit(tarea); // creo una tarea para reservar el viaje
 
     }
 
-    /*private void cancelarReserva(String peticionAProcesar) {
+    private void consultarDisponibilidad(String cadena) {
+        String[] partes = cadena.split("_");
+
+        String tipoCliente = partes[0];
+        String tipoPeticion = partes[1];
+        String idCliente = partes[2];
+        int viaje = Integer.parseInt(partes[3]);
+        executor.submit(() -> {
+            lock.lock(); // bloquear
+            try {
+                Constantes.Viajes c = Constantes.Viajes.values()[viaje];
+                int capacidadConsumida = reservasEEDD.get(Constantes.Viajes.values()[viaje]).size();
+                int capacidad = Constantes.Viajes.values()[viaje].getCapacidad();
+                if (capacidadConsumida < capacidad) { // Si hay plazas disponibles
+                    sendRespuesta("true");
+                    System.out.println("HAY Disponibilidad de viaje: " + viaje + " para el cliente " + tipoCliente + "___" + idCliente);
+                } else {
+                    sendRespuesta("false");
+                    System.out.println("NO HAY Disponibilidad de viaje: " + viaje + " para el cliente " + tipoCliente + "___" + idCliente);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                lock.unlock(); // desbloquear
+            }
+        });
+
+    }
+
+    private void cancelarReserva(String peticionAProcesar) {
         // lógica para cancelar reserva
         String[] partes = peticionAProcesar.split("_");
 
@@ -214,28 +254,70 @@ public class ReservaViaje implements Runnable, Constantes{
         String tipoPeticion = partes[1];
         String idCliente = partes[2];
         String viaje = partes[3];
-        String codigoReserva = partes[4 ];
-        System.out.println("1111111111111111111111111111111111");
+        String codigoReserva = partes[4];
+
         executor.submit(() -> { // Un hilo para cancelar la reserva
-            synchronized (reservasEEDD) { // exclusión mutua sobre la estructura de datos
+            lock.lock();
+             // exclusión mutua sobre la estructura de datos
                 System.out.println("Tarea de cancelación reserva comenzada: " + peticionAProcesar);
-                List<Reserva> reservasViaje = reservasEEDD.get(Constantes.Viajes.valueOf(viaje));
+                List<Reserva> reservasViaje = reservasEEDD.get(Constantes.Viajes.values()[Integer.parseInt(viaje)]);
                 if (reservasViaje != null) { // Si hay reservas
                     for (Iterator<Reserva> iterator = reservasViaje.iterator(); iterator.hasNext();) {
                         Reserva reserva = iterator.next();
-                        if (reserva.getCodigoReserva().equals(codigoReserva)) {
+                        if (reserva.getCodigoReserva().equals(codigoReserva) && reserva.isConCancelacion()) {
                             iterator.remove();
+                            System.out.println("Tarea de cancelación reserva COMPLEEEETADAAA: " + codigoReserva);
                             break;
                         }
                     }
                 }
                 System.out.println("reserva cancelada: " + peticionAProcesar);
-            }
+            lock.unlock();
         });
 
-    }*/
+    }
 
-    private String ProcesarOrigenMenasaje(TextMessage msg,String Reserva) {
-        return "Agencia";
+    private void efectuarPago(String peticionAProcesar) {
+        // lógica para efectuar pago
+        String[] partes = peticionAProcesar.split("_");
+
+        String tipoCliente = partes[0];
+        String tipoPeticion = partes[1];
+        String idCliente = partes[2];
+        String viaje = partes[3];
+        String codigoReserva = partes[4];
+        String tipoPago = partes[5];
+
+        executor.submit(() -> { // Un hilo para cancelar la reserva
+            lock.lock();
+            // exclusión mutua sobre la estructura de datos
+            System.out.println("Tarea de pago de reserva comenzada--------------: " + peticionAProcesar);
+            List<Reserva> reservasViaje = reservasEEDD.get(Constantes.Viajes.values()[Integer.parseInt(viaje)]);
+            if (reservasViaje != null) { // Si hay reservas
+                for (Iterator<Reserva> iterator = reservasViaje.iterator(); iterator.hasNext();) {
+                    Reserva reserva = iterator.next();
+                    if (reserva.getCodigoReserva().equals(codigoReserva)) {
+                        if (tipoPago.equals("Cancelacion")){
+                            reserva.setConCancelacion(true);
+                            System.out.println("Reserva pagada con cancelación---------------: " + codigoReserva);
+                        }else {
+                            System.out.println("Reserva pagada sin cancelación-------------: " + codigoReserva);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            lock.unlock();
+        });
+        System.out.println("Efectuar pago: ");
+    }
+
+    private void sendRespuesta(String respuesta) throws JMSException, InterruptedException {
+        TextMessage message = session.createTextMessage(respuesta);
+        message.setStringProperty("tipo", "respuestaDisponibilidadViaje");
+        producerRespuestaDisponibilidad.send(message);
+        System.out.println("RESPUESTA ENVIADA");
+        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
     }
 }
