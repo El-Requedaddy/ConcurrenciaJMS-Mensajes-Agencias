@@ -161,7 +161,6 @@ public class ReservaViaje implements Runnable, Constantes{
 
         Iterator<String> iterator = cola.iterator();
         if (!cola.isEmpty()) {
-            System.out.println("Mensajes en la cola: " + cola.size());
             while (i < PRIORIDAD && iterator.hasNext()) { // Procesamos los 5 primeros mensajes en búsqueda de petición de Agencia
                 String mensajeActual = iterator.next(); // iterar sobre la cola
                 tipoCliente = ComprobarReserva(mensajeActual);// Obtengo el tipo de cliente
@@ -171,7 +170,6 @@ public class ReservaViaje implements Runnable, Constantes{
                     i = 5;
                     iterator.remove(); // elimino la petición de la cola
                 }
-                //System.out.println("Mensaje recibido: " + mensajeActual);
                 i++;
             }
 
@@ -201,22 +199,17 @@ public class ReservaViaje implements Runnable, Constantes{
                 break;
             case "Cancelacion":
                 cancelarReserva(peticionAProcesar);
-                //System.out.println("Cancelación de reserva: ");
                 break;
             case "Consulta":
                 consultarDisponibilidad(peticionAProcesar);
-                //System.out.println("Consulta de disponibilidad: ");
                 break;
             case "PagoBasico":
                 efectuarPago(peticionAProcesar);
-                //System.out.println("Pago básico: ");
                 break;
             case "PagoCancelacion":
                 efectuarPago(peticionAProcesar);
-                //System.out.println("Pago básico: ");
                 break;
             default:
-                System.out.println("Petición no reconocida");
                 break;
         }
     }
@@ -258,10 +251,8 @@ public class ReservaViaje implements Runnable, Constantes{
                 int capacidad = Constantes.Viajes.values()[viaje].getCapacidad();
                 if (capacidadConsumida < capacidad) { // Si hay plazas disponibles
                     sendRespuesta("true");
-                    System.out.println("HAY Disponibilidad de viaje: " + viaje + " para el cliente " + tipoCliente + "___" + idCliente);
                 } else {
                     sendRespuesta("false");
-                    System.out.println("NO HAY Disponibilidad de viaje: " + viaje + " para el cliente " + tipoCliente + "___" + idCliente);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -285,7 +276,6 @@ public class ReservaViaje implements Runnable, Constantes{
         executor.submit(() -> { // Un hilo para cancelar la reserva
             lock.lock();
              // exclusión mutua sobre la estructura de datos
-                System.out.println("Tarea de cancelación reserva comenzada: " + peticionAProcesar);
                 List<Reserva> reservasViaje = reservasEEDD.get(Constantes.Viajes.values()[Integer.parseInt(viaje)]);
                 if (reservasViaje != null) { // Si hay reservas
                     for (Iterator<Reserva> iterator = reservasViaje.iterator(); iterator.hasNext();) {
@@ -297,7 +287,6 @@ public class ReservaViaje implements Runnable, Constantes{
                         }
                     }
                 }
-                System.out.println("reserva cancelada: " + peticionAProcesar);
             lock.unlock();
         });
 
@@ -317,7 +306,6 @@ public class ReservaViaje implements Runnable, Constantes{
         executor.submit(() -> { // Un hilo para cancelar la reserva
             lock.lock();
             // exclusión mutua sobre la estructura de datos
-            System.out.println("Tarea de pago de reserva comenzada--------------: " + peticionAProcesar);
             List<Reserva> reservasViaje = reservasEEDD.get(Constantes.Viajes.values()[Integer.parseInt(viaje)]);
             if (reservasViaje != null) { // Si hay reservas
                 for (Iterator<Reserva> iterator = reservasViaje.iterator(); iterator.hasNext();) {
@@ -336,7 +324,6 @@ public class ReservaViaje implements Runnable, Constantes{
 
             lock.unlock();
         });
-        System.out.println("Efectuar pago: ");
     }
 
     private void sendRespuesta(String respuesta) throws JMSException, InterruptedException {

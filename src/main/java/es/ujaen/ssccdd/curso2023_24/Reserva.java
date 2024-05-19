@@ -32,4 +32,14 @@ public class Reserva {
     public void setConCancelacion(boolean conCancelacion) {
         this.conCancelacion = conCancelacion;
     }
+
+    @Override
+    public String toString() {
+        return "Reserva{" +
+                "codigoReserva='" + codigoReserva + '\'' +
+                ", tipoCliente='" + tipoCliente + '\'' +
+                ", idCliente='" + idCliente + '\'' +
+                ", conCancelacion=" + conCancelacion +
+                '}';
+    }
 }

@@ -6,10 +6,10 @@ import java.util.Random;
 public interface Constantes {
 
     // Tiempos de espera
-    public static final int TIEMPO_ESPERA_AGENCIA = 10000;
+    public static final int TIEMPO_ESPERA_AGENCIA = 5000;
     public static final int TIEMPO_ESPERA_USUARIO = 5000;
-    public static final int TIEMPO_ESPERA_SOLICITUD = 5000;
-    public static final int TIEMPO_ESPERA_FINALIZACION = 10000;
+    public static final int TIEMPO_ESPERA_SOLICITUD = 2000;
+    public static final int TIEMPO_ESPERA_FINALIZACION = 60000;
 
     public static final String DESTINO = "ssccdd.curso2024.3.";
     public static final String DIRECCION = "tcp://localhost:61616";

@@ -24,7 +24,6 @@ public class MensajeListener implements MessageListener {
                 synchronized (queue) {
                     queue.addLast(text);//meto al final de la cola
                 }
-                System.out.println("Mensaje recibido: " + text + " en la cola " + queueName);
             } catch (JMSException e) {
                 e.printStackTrace();
             }

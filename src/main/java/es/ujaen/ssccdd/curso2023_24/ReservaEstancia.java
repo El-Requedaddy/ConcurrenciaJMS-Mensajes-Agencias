@@ -137,7 +137,6 @@ public class ReservaEstancia implements Runnable, Constantes{
                 Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
             }
 
-            resultado.addReservaEstancia(reservasEEDD);
 
         }
 
@@ -213,7 +212,6 @@ public class ReservaEstancia implements Runnable, Constantes{
                 //System.out.println("Pago básico: ");
                 break;
             default:
-                System.out.println("Petición no reconocida");
                 break;
         }
     }
@@ -282,19 +280,17 @@ public class ReservaEstancia implements Runnable, Constantes{
         executor.submit(() -> { // Un hilo para cancelar la reserva
             lock.lock();
             // exclusión mutua sobre la estructura de datos
-            System.out.println("Tarea de cancelación reserva comenzada: " + peticionAProcesar);
             List<Reserva> reservasViaje = reservasEEDD.get(Constantes.Viajes.values()[Integer.parseInt(viaje)]);
             if (reservasViaje != null) { // Si hay reservas
                 for (Iterator<Reserva> iterator = reservasViaje.iterator(); iterator.hasNext();) {
                     Reserva reserva = iterator.next();
                     if (reserva.getCodigoReserva().equals(codigoReserva) && reserva.isConCancelacion()) {
                         iterator.remove();
-                        System.out.println("Tarea de cancelación reserva COMPLEEEETADAAA: " + codigoReserva);
+                        System.out.println("Tarea de cancelación reserva de estancia completada: " + codigoReserva);
                         break;
                     }
                 }
             }
-            System.out.println("reserva cancelada: " + peticionAProcesar);
             lock.unlock();
         });
 
@@ -314,7 +310,6 @@ public class ReservaEstancia implements Runnable, Constantes{
         executor.submit(() -> { // Un hilo para cancelar la reserva
             lock.lock();
             // exclusión mutua sobre la estructura de datos
-            System.out.println("Tarea de pago de reserva comenzada--------------: " + peticionAProcesar);
             List<Reserva> reservasViaje = reservasEEDD.get(Constantes.Viajes.values()[Integer.parseInt(viaje)]);
             if (reservasViaje != null) { // Si hay reservas
                 for (Iterator<Reserva> iterator = reservasViaje.iterator(); iterator.hasNext();) {
@@ -322,9 +317,9 @@ public class ReservaEstancia implements Runnable, Constantes{
                     if (reserva.getCodigoReserva().equals(codigoReserva)) {
                         if (tipoPago.equals("Cancelacion")){
                             reserva.setConCancelacion(true);
-                            System.out.println("Reserva pagada con cancelación---------------: " + codigoReserva);
+                            System.out.println("Reserva pagada con cancelación de estancia---------------: " + codigoReserva);
                         }else {
-                            System.out.println("Reserva pagada sin cancelación-------------: " + codigoReserva);
+                            System.out.println("Reserva pagada sin cancelación de estancia-------------: " + codigoReserva);
                         }
                         break;
                     }
@@ -340,7 +335,7 @@ public class ReservaEstancia implements Runnable, Constantes{
         TextMessage message = session.createTextMessage(respuesta);
         message.setStringProperty("tipo", "respuestaDisponibilidadViaje");
         producerRespuestaDisponibilidad.send(message);
-        System.out.println("RESPUESTA ENVIADA");
+        System.out.println("RESPUESTA DE ESTANCIA ENVIADA");
         TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
     }
 }

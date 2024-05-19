@@ -6,6 +6,7 @@ import org.apache.activemq.ActiveMQConnectionFactory;
 
 import java.util.Objects;
 import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -73,19 +74,23 @@ public class Agencia implements Runnable, Constantes {
 
     public void run() {
         int c = 0;
+        final String[] codigo = {""};
         while (!Thread.currentThread().isInterrupted()) {
             if (quiereReservarViaje()) {
                 executorService.submit(() -> { // Un hilo espera a la respuesta
                     try {
+                        codigo[0] = UUID.randomUUID().toString();
+                        System.out.println("Agencia: Consulta de disponibilidad de viaje");
                         sendConsultaDisponibilidadViaje("Agencia_Consulta_" + iD + "_" + Constantes.generarViajeAleatorio());
                         TextMessage message = (TextMessage) consumerConsultaDisponibilidadViaje.receive();
                         System.out.println("Agencia: Recibida respuesta de disponibilidad de viaje:::::::" + message.getText());
                         if (Objects.equals(message.getText(), "true")) {
-                            sendReservaViaje("Agencia_Reserva_" + iD + "_" + Constantes.generarViajeAleatorio()+ "_" + "Codigoooo"+c);
+                            sendReservaViaje("Agencia_Reserva_" + iD + "_" + Constantes.generarViajeAleatorio()+ "_" + "Codigoooo"+ codigo[0]);
+                            System.out.println("Agencia: Reserva de viaje enviada");
                             if (quierePagoConCancelacion()) {
-                                sendPagoConCancelacion("Agencia_PagoBasico_" + iD + "_" + Constantes.generarViajeAleatorio()+ "_" + "Codigoooo"+c + "_Cancelacion");
+                                sendPagoConCancelacion("Agencia_PagoBasico_" + iD + "_" + Constantes.generarViajeAleatorio()+ "_" + "Codigoooo"+ codigo[0] + "_Cancelacion");
                             }else {
-                                sendPagoBasico("Agencia_PagoConCancelacion_" + iD + "_" + Constantes.generarViajeAleatorio()+ "_" + "Codigoooo"+c + "_Basico");
+                                sendPagoBasico("Agencia_PagoConCancelacion_" + iD + "_" + Constantes.generarViajeAleatorio()+ "_" + "Codigoooo"+ codigo[0] + "_Basico");
                             }
                         }
                     } catch (JMSException | InterruptedException e) {
@@ -95,11 +100,12 @@ public class Agencia implements Runnable, Constantes {
             } else if (quiereReservarEstancia()) {
                 executorService.submit(() -> {
                     try {
+                        System.out.println("Agencia: Consulta de disponibilidad de estancia");
                         sendConsultaDisponibilidadEstancia("Agencia_Consulta_" + iD + "_" + Constantes.generarViajeAleatorio());
                         TextMessage message = (TextMessage) consumerConsultaDisponibilidadEstancia.receive();
                         System.out.println("Agencia: Recibida respuesta de disponibilidad de estancia____" + message.getText());
                         if (Objects.equals(message.getText(), "true")) {
-                            sendReservaEstanciaAgencia("Agencia_Reserva_" + iD + "_" + Constantes.generarViajeAleatorio()+ "_" + "EstanciaCode"+c);
+                            sendReservaEstanciaAgencia("Agencia_Reserva_" + iD + "_" + Constantes.generarViajeAleatorio()+ "_" + "EstanciaCode"+ codigo[0]);
                         }
                     } catch (JMSException | InterruptedException e) {
                         Thread.currentThread().interrupt();
@@ -108,15 +114,10 @@ public class Agencia implements Runnable, Constantes {
             }
 
             if (quiereCancelarReserva()) {
-                try {
-                    TimeUnit.MILLISECONDS.sleep(6000);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
                 executorService.submit(() -> {
                     try {
                         System.out.println("Agencia: PEtición de cancelación de reserva");
-                        sendCancelacionReserva("Agencia_Cancelacion_" + iD + "_" + Constantes.getTipoCancelacionAleatorio() + "_Codigoooo"+c);
+                        sendCancelacionReserva("Agencia_Cancelacion_" + iD + "_" + Constantes.getTipoCancelacionAleatorio() + "_Codigoooo"+ codigo[0]);
                     } catch (JMSException e) {
                         throw new RuntimeException(e);
                     }
