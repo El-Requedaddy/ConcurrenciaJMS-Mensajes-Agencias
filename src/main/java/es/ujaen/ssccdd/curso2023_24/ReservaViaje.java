@@ -2,12 +2,14 @@ package es.ujaen.ssccdd.curso2023_24;
 
 import org.apache.activemq.ActiveMQConnection;
 import org.apache.activemq.ActiveMQConnectionFactory;
-import org.apache.camel.Producer;
 
 import javax.jms.*;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class ReservaViaje implements Runnable, Constantes{
     private final String queue;
@@ -15,15 +17,32 @@ public class ReservaViaje implements Runnable, Constantes{
     private Connection connection;
     private Session session;
     private Destination destination;
-    Deque<String> cola;
+    Deque<String> colaReserva;
+    Deque<String> colaCancelacion;
+    Deque<String> colaPago;
+    Deque<String> colaConsulta;
+    Deque<String> colaPagoCancelacion;
     ExecutorService executor;
     HashMap<Constantes.Viajes, List<Reserva>> reservasEEDD;
+    MessageConsumer consumer;
+    MessageConsumer consumerCancelacion;
+    Lock lock;
 
-    public ReservaViaje(String queue) {
+    public ReservaViaje(String queue) throws JMSException {
         this.queue = queue;
-        this.cola = new LinkedList<>();
+        this.colaReserva = new LinkedList<>();
+        this.colaCancelacion = new LinkedList<>();
+        this.colaPago = new LinkedList<>();
+        this.colaPagoCancelacion = new LinkedList<>();
+        this.colaConsulta = new LinkedList<>();
         executor = Executors.newFixedThreadPool(10);
+        lock = new ReentrantLock();
         reservasEEDD = new HashMap<Constantes.Viajes, List<Reserva>>();
+        reservasEEDD.put(Viajes.VIAJE1, new ArrayList<>());
+        reservasEEDD.put(Viajes.VIAJE2, new ArrayList<>());
+        reservasEEDD.put(Viajes.VIAJE3, new ArrayList<>());
+        reservasEEDD.put(Viajes.VIAJE4, new ArrayList<>());
+        reservasEEDD.put(Viajes.VIAJE5, new ArrayList<>());
     }
 
     @Override
@@ -59,33 +78,70 @@ public class ReservaViaje implements Runnable, Constantes{
     }
 
     public void execution() throws Exception {
+        System.out.println(" Acceso("+queue+") en ejecución...");
         TextMessage msg;
-        MessageConsumer consumer = session.createConsumer(destination);
-        consumer.setMessageListener(new MensajeListener(cola));
+        consumer = session.createConsumer(session.createTopic(DESTINO_RESERVA_VIAJE));
+        consumer.setMessageListener(new MensajeListener(colaReserva,"Reserva")); // listener para la cola de reserva
         connection.start();
 
+        consumerCancelacion = session.createConsumer(session.createTopic(DESTINO_CANCELACION_RESERVA_VIAJE));
+        consumerCancelacion.setMessageListener(new MensajeListener(colaCancelacion,"Cancelacion")); // listener para la cola de cancelación
+        connection.start();
+
+        MessageConsumer consumerPago = session.createConsumer(session.createTopic(DESTINO_PAGO_BASICO));
+        consumerPago.setMessageListener(new MensajeListener(colaPago,"PAgo")); // listener para la cola de pago
+        connection.start();
+
+        MessageConsumer consumerPagoCancelacion = session.createConsumer(session.createTopic(DESTINO_PAGO_CANCELACION));
+        consumerPagoCancelacion.setMessageListener(new MensajeListener(colaPagoCancelacion,"PAgoCancelacion")); // listener para la cola de pago cancelación
+        connection.start();
+
+        MessageConsumer consumerConsulta = session.createConsumer(session.createTopic(DESTINO_CONSULTA_DISPONIBILIDAD_VIAJE));
+        consumerConsulta.setMessageListener(new MensajeListener(colaConsulta,"Consulta")); // listener para la cola de consulta
+        connection.start();
+
+
+        while (true) {
+            synchronized (colaReserva) {
+                procesarMensaje(colaReserva, "Reserva");
+            }
+            synchronized (colaCancelacion) {
+                procesarMensaje(colaCancelacion, "Cancelacion");
+            }
+            synchronized (colaPago) {
+                procesarMensaje(colaPago, "Pago");
+            }
+            synchronized (colaConsulta) {
+                procesarMensaje(colaConsulta, "Consulta");
+            }
+            synchronized (colaPagoCancelacion) {
+                procesarMensaje(colaPagoCancelacion, "PagoCancelacion");
+            }
+        }
+
+
+
+    }
+    private void procesarMensaje(Deque<String> cola, String tipoPeticion) throws JMSException, InterruptedException {
+        //lock.lock();
         int i = 0;
         boolean procesado = false;
-        String tipoPeticion = "";
         String tipoCliente = "";
         String peticionAProcesar="";
-        Iterator<String> iterator = cola.iterator();
 
+        Iterator<String> iterator = cola.iterator();
         if (!cola.isEmpty()) {
             System.out.println("Mensajes en la cola: " + cola.size());
-            while (i < 5) { // Procesamos los 5 primeros mensajes en búsqueda de petición de Agencia
-                if (!iterator.hasNext()) {
-                    break;
-                }
+            while (i < PRIORIDAD && iterator.hasNext()) { // Procesamos los 5 primeros mensajes en búsqueda de petición de Agencia
                 String mensajeActual = iterator.next(); // iterar sobre la cola
-                ComprobarReserva(mensajeActual, tipoCliente, tipoPeticion);// Obtengo el tipo de cliente y el tipo de petición
-                if (tipoCliente == "Agencia") {
+                tipoCliente = ComprobarReserva(mensajeActual);// Obtengo el tipo de cliente
+                if (Objects.equals(tipoCliente, "Agencia")) {
                     peticionAProcesar = mensajeActual;
                     procesado = true;
                     i = 5;
                     iterator.remove(); // elimino la petición de la cola
                 }
-                System.out.println("Mensaje recibido: " + mensajeActual);
+                //System.out.println("Mensaje recibido: " + mensajeActual);
                 i++;
             }
 
@@ -97,50 +153,42 @@ public class ReservaViaje implements Runnable, Constantes{
             }
 
             if (peticionAProcesar != "")
-                procesarPeticion(peticionAProcesar);
+                procesarPeticion(peticionAProcesar,tipoPeticion);
             else
                 System.out.println("No hay mensajes en la cola");
 
-        /*
-        // Se confirma el acceso al puente
-        Destination respuesta = session.createQueue(QUEUE + RESPUESTA.getValor() + coche.getName());
-        MessageProducer producer = session.createProducer(respuesta);
-        msg = session.createTextMessage(gsonUtil.encode(coche, MsgCoche.class));
-        producer.send(msg);
-        producer.close();*/
+        }
+        TimeUnit.SECONDS.sleep(2);
+        //lock.unlock();
+    }
+
+
+
+    private void procesarPeticion(String peticionAProcesar, String tipoPeticion) throws JMSException {
+        switch (tipoPeticion) {
+            case "Reserva":
+                reservarViaje(peticionAProcesar);
+                break;
+            case "Cancelacion":
+                System.out.println("Cancelación de reserva: ");
+                break;
+            case "Consulta":
+                System.out.println("Consulta de disponibilidad: ");
+                break;
+            case "Pago":
+                System.out.println("Pago básico: ");
+                break;
+            default:
+                System.out.println("Petición no reconocida");
+                break;
         }
     }
 
-    private void procesarPeticion(String peticionAProcesar) throws JMSException {
-        String tipoPeticion = "", tipoCliente = "";
-        if (peticionAProcesar != "") {
-            ComprobarReserva(peticionAProcesar, tipoCliente, tipoPeticion);
-            switch (tipoPeticion) {
-                case "Reserva":
-                    reservarViaje(peticionAProcesar);
-                    break;
-                case "Cancelacion":
-                    //cancelarReserva(peticionAProcesar);
-                    break;
-                case "Consulta":
-
-                    break;
-                case "Pago":
-                    //efectuarPago(peticionAProcesar);
-                    break;
-                default:
-                    System.out.println("Petición no reconocida");
-                    break;
-            }
-        }
-    }
-
-    private void ComprobarReserva(String cadena,String tipoCliente, String tipoPeticion) {
+    private String ComprobarReserva(String cadena) {
         String[] partes = cadena.split("_");
 
         // Imprimir las partes izquierda y derecha
-        tipoCliente = partes[0];
-        tipoPeticion = partes[1];
+        return partes[0];
 
     }
 
@@ -153,12 +201,12 @@ public class ReservaViaje implements Runnable, Constantes{
         String viaje = partes[3];
         String codigoReserva = UUID.randomUUID().toString();
 
-        TareaReservaViaje tarea = new TareaReservaViaje(codigoReserva, tipoCliente, idCliente, reservasEEDD, Constantes.Viajes.valueOf(viaje));
+        TareaReservaViaje tarea = new TareaReservaViaje(codigoReserva, tipoCliente, idCliente, reservasEEDD, viaje);
         executor.submit(tarea); // creo una tarea para reservar el viaje
 
     }
 
-    private void cancelarReserva(String peticionAProcesar) {
+    /*private void cancelarReserva(String peticionAProcesar) {
         // lógica para cancelar reserva
         String[] partes = peticionAProcesar.split("_");
 
@@ -167,7 +215,7 @@ public class ReservaViaje implements Runnable, Constantes{
         String idCliente = partes[2];
         String viaje = partes[3];
         String codigoReserva = partes[4 ];
-
+        System.out.println("1111111111111111111111111111111111");
         executor.submit(() -> { // Un hilo para cancelar la reserva
             synchronized (reservasEEDD) { // exclusión mutua sobre la estructura de datos
                 System.out.println("Tarea de cancelación reserva comenzada: " + peticionAProcesar);
@@ -185,7 +233,7 @@ public class ReservaViaje implements Runnable, Constantes{
             }
         });
 
-    }
+    }*/
 
     private String ProcesarOrigenMenasaje(TextMessage msg,String Reserva) {
         return "Agencia";

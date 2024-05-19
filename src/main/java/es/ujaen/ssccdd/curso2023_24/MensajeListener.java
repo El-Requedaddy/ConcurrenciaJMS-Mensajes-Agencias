@@ -8,9 +8,11 @@ import java.util.Deque;
 
 public class MensajeListener implements MessageListener {
     private final Deque<String> queue;
+    private final String queueName;
 
-    public MensajeListener (Deque<String> queue) {
+    public MensajeListener (Deque<String> queue, String queueName) {
         this.queue = queue;
+        this.queueName = queueName;
     }
 
     @Override
@@ -19,8 +21,10 @@ public class MensajeListener implements MessageListener {
             TextMessage textMessage = (TextMessage) message;
             try {
                 String text = textMessage.getText();
-                queue.addFirst(text);//meto al final de la cola
-                System.out.println("Mensaje recibido: " + text);
+                synchronized (queue) {
+                    queue.addLast(text);//meto al final de la cola
+                }
+                System.out.println("Mensaje recibido: " + text + " en la cola " + queueName);
             } catch (JMSException e) {
                 e.printStackTrace();
             }

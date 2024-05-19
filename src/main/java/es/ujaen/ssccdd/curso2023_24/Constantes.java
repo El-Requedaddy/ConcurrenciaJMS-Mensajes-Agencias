@@ -25,13 +25,14 @@ public interface Constantes {
     public static final String DESTINO_RESPUESTA_CONSULTA_DISPONIBILIDAD_ESTANCIA = "ssccdd.curso2024.3.respuestaConsultaDisponibilidadEstancia";
     public static final String DESTINO_CANCELACION_RESERVA_VIAJE = "ssccdd.curso2024.3.cancelacionReservaViaje";
     public static final String DESTINO_CANCELACION_RESERVA_ESTANCIA = "ssccdd.curso2024.3.cancelacionReservaEstancia";
+    public static final int PRIORIDAD = 5;
 
     public enum Viajes {
-        VIAJE1("VIAJE A JAÉN", 3),
-        VIAJE2("VIAJE A JAPÓN", 4),
-        VIAJE3("VIAJE A LATAM", 3),
-        VIAJE4("VIAJE A YUGOSLAVIA", 5),
-        VIAJE5("VIAJE A GUATEMALA", 2);
+        VIAJE1("VIAJE A JAÉN", 1),
+        VIAJE2("VIAJE A JAPÓN", 1),
+        VIAJE3("VIAJE A LATAM", 1),
+        VIAJE4("VIAJE A YUGOSLAVIA", 1),
+        VIAJE5("VIAJE A GUATEMALA", 1);
 
         private final String valor;
         private final int capacidad;
@@ -50,11 +51,11 @@ public interface Constantes {
         }
     }
 
-    public static Viajes generarViajeAleatorio() {
+    public static int generarViajeAleatorio() {
         Viajes[] viajes = Viajes.values();
         Random random = new Random();
         int indiceAleatorio = random.nextInt(viajes.length);
-        return viajes[indiceAleatorio];
+        return viajes[indiceAleatorio].ordinal();
     }
 
     public enum Estancias {

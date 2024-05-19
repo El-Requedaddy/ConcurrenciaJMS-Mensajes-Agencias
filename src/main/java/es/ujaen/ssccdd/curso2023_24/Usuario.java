@@ -54,7 +54,8 @@ public class Usuario implements Runnable, Constantes {
             if (quiereReservarViaje()) {
                 executorService.submit(() -> { // Un hilo espera a la respuesta
                     try {
-                        sendConsultaDisponibilidadViaje(iD + "_" + Constantes.generarViajeAleatorio());
+                        sendReservaViaje("Usuario_Reserva_" + iD + "_" + Constantes.generarViajeAleatorio());
+                        sendConsultaDisponibilidadViaje("Usuario_Reserva_" + iD + "_" + Constantes.generarViajeAleatorio());
                         Message message = consumerReservaViaje.receive();
                         System.out.println("Usuario: Recibida respuesta de disponibilidad de viaje");
                         if (message instanceof TextMessage && message.getBooleanProperty("respuestaDisponibilidad")) {
@@ -103,7 +104,7 @@ public class Usuario implements Runnable, Constantes {
     }
 
     private boolean quiereReservarViaje() {
-        return false; // lógica para determinar si quiere reservar un viaje
+        return true; // lógica para determinar si quiere reservar un viaje
     }
 
     private boolean quiereReservarEstancia() {
@@ -120,7 +121,7 @@ public class Usuario implements Runnable, Constantes {
 
     private void sendReservaViaje(String reserva) throws JMSException, InterruptedException {
         TextMessage message = session.createTextMessage(reserva);
-        message.setStringProperty("tipo", "reservaViajeAgencia");
+        message.setStringProperty("tipo", "reservaViajeUsuario");
         producerReservaViaje.send(message);
         System.out.println("Agencia: Reserva de viaje enviada");
         TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);

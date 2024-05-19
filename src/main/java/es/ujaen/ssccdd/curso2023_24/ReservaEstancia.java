@@ -54,7 +54,7 @@ public class ReservaEstancia implements Runnable{
     public void execution() throws Exception {
         TextMessage msg;
         MessageConsumer consumer = session.createConsumer(destination);
-        consumer.setMessageListener(new MensajeListener(cola));
+        consumer.setMessageListener(new MensajeListener(cola,"Estancia"));
         connection.start();
 
         while (true) {

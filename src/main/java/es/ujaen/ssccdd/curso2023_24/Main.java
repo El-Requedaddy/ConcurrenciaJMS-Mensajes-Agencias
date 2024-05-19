@@ -17,13 +17,13 @@ public class Main {
             Thread agenciaThread = new Thread(agencia);
             agenciaThread.start();
 
-            /*
+
             // Crear e iniciar varios procesos de Usuario
             for (int i = 1; i <= 5; i++) {
                 Usuario usuario = new Usuario(i);
                 Thread usuarioThread = new Thread(usuario);
                 usuarioThread.start();
-            }*/
+            }
         } catch (JMSException e) {
             e.printStackTrace();
         }
