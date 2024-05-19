@@ -63,32 +63,32 @@ public class Agencia implements Runnable, Constantes {
 
     public void run() {
 
-        while (!finTarea() && !Thread.currentThread().isInterrupted()) {
+        while (!Thread.currentThread().isInterrupted()) {
             if (quiereReservarViaje()) {
                 executorService.submit(() -> { // Un hilo espera a la respuesta
                     try {
-                        sendReservaViaje("Agencia_Reserva_" + iD + "_" + Constantes.generarViajeAleatorio());
-                        sendConsultaDisponibilidadViaje("Agencia_" + iD + "_" + Constantes.generarViajeAleatorio());
+                        sendConsultaDisponibilidadViaje("Agencia_Consulta_" + iD + "_" + Constantes.generarViajeAleatorio());
                         Message message = consumerConsultaDisponibilidadViaje.receive();
                         System.out.println("Agencia: Recibida respuesta de disponibilidad de viaje");
                         if (message instanceof TextMessage && message.getBooleanProperty("respuestaDisponibilidad")) {
+                            System.out.println("Agencia: Existe disponibilidad de viaje y procede a pedir reserva");
                             sendReservaViaje("reservaViaje");
                         }
                     } catch (JMSException | InterruptedException e) {
-                        throw new RuntimeException(e);
+                        Thread.currentThread().interrupt();
                     }
                 });
             } else if (quiereReservarEstancia()) {
                 executorService.submit(() -> {
                     try {
-                        sendConsultaDisponibilidadEstancia("Agencia_" + iD + "_" + Constantes.generarEstanciaAleatoria());
+                        sendConsultaDisponibilidadEstancia("Agencia_Consulta_" + iD + "_" + Constantes.generarEstanciaAleatoria());
                         Message message = consumerConsultaDisponibilidadEstancia.receive();
                         System.out.println("Agencia: Recibida respuesta de disponibilidad de estancia");
                         if (message instanceof TextMessage && message.getBooleanProperty("respuestaDisponibilidad")) {
                             sendReservaEstanciaAgencia("reservaViaje");
                         }
                     } catch (JMSException | InterruptedException e) {
-                        throw new RuntimeException(e);
+                        Thread.currentThread().interrupt();
                     }
                 });
             } else if (quiereCancelarReserva()) {
@@ -105,7 +105,12 @@ public class Agencia implements Runnable, Constantes {
             try {
                 TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_AGENCIA);
             } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+                Thread.currentThread().interrupt();
+            }
+
+            if (Thread.currentThread().isInterrupted()) {
+                executorService.shutdown();
+                break;
             }
         }
 
@@ -137,7 +142,11 @@ public class Agencia implements Runnable, Constantes {
         message.setStringProperty("tipo", "reservaViajeAgencia");
         producerReservaViaje.send(message);
         System.out.println("Agencia: Reserva de viaje enviada");
-        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        try {
+            TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
+        }
     }
 
     private void sendReservaEstanciaAgencia(String reserva) throws JMSException, InterruptedException{
@@ -145,7 +154,11 @@ public class Agencia implements Runnable, Constantes {
         message.setStringProperty("tipo", "reservaEstanciaAgencia");
         producerReservaEstancia.send(message);
         //System.out.println("Agencia: Reserva de estancia enviada");
-        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        try {
+            TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
+        }
     }
 
     private void sendConsultaDisponibilidadViaje(String consulta) throws JMSException, InterruptedException {
@@ -153,7 +166,11 @@ public class Agencia implements Runnable, Constantes {
         message.setStringProperty("tipo", "consultaDisponibilidad");
         producerConsultaDisponibilidadViaje.send(message);
         //System.out.println("Agencia: Reserva de estancia enviada");
-        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        try {
+            TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
+        }
     }
 
     private void sendConsultaDisponibilidadEstancia(String consulta) throws JMSException, InterruptedException {
@@ -161,7 +178,11 @@ public class Agencia implements Runnable, Constantes {
         message.setStringProperty("tipo", "consultaDisponibilidad");
         producerConsultaDisponibilidadEstancia.send(message);
         //System.out.println("Agencia: Reserva de estancia enviada");
-        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        try {
+            TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
+        }
     }
 
     private void sendPagoBasico(String pago) throws JMSException {

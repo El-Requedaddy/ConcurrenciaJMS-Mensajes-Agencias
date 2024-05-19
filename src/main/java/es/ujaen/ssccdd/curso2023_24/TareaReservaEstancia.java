@@ -6,15 +6,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class TareaReservaViaje implements Runnable {
+public class TareaReservaEstancia implements Runnable {
     private final String codigoReserva;
     private final String tipoCliente;
     private final String idCliente;
-    private final HashMap<Constantes.Viajes, List<Reserva>> reservas;
+    private final HashMap<Constantes.Estancias, List<Reserva>> reservas;
     private final int destino;
     private final Lock lock;
 
-    public TareaReservaViaje(String codigoReserva, String tipoCliente,String idCliente, HashMap<Constantes.Viajes, List<Reserva>> reservas,String destino, Lock lock) {
+    public TareaReservaEstancia(String codigoReserva, String tipoCliente,String idCliente, HashMap<Constantes.Estancias, List<Reserva>> reservas,String destino, Lock lock) {
         this.codigoReserva = codigoReserva;
         this.tipoCliente = tipoCliente;
         this.reservas = reservas;
@@ -25,7 +25,7 @@ public class TareaReservaViaje implements Runnable {
 
     @Override
     public void run() {
-        System.out.println("Iniciado hilo para reserva de viaje: " + codigoReserva + " por el cliente " + tipoCliente + "___" + idCliente);
+        System.out.println("Iniciado hilo para reserva de estancia: " + codigoReserva + " por el cliente " + tipoCliente + "___" + idCliente);
         Reserva reservaNueva = new Reserva(codigoReserva, tipoCliente, idCliente);
         if(reservarViaje(destino, reservaNueva))
             System.out.println("Reserva realizada: " + codigoReserva + " por el cliente " + tipoCliente + "___" + idCliente);
@@ -38,14 +38,14 @@ public class TareaReservaViaje implements Runnable {
         }
     }
 
-    public boolean reservarViaje(int viaje, Reserva reserva) {
+    public boolean reservarViaje(int estancia, Reserva reserva) {
         lock.lock(); // bloquear
         try {
-            Constantes.Viajes c = Constantes.Viajes.values()[viaje];
-            int capacidadConsumida = reservas.get(Constantes.Viajes.values()[viaje]).size();
-            int capacidad = Constantes.Viajes.values()[viaje].getCapacidad();
+            Constantes.Estancias c = Constantes.Estancias.values()[estancia];
+            int capacidadConsumida = reservas.get(Constantes.Estancias.values()[estancia]).size();
+            int capacidad = Constantes.Estancias.values()[estancia].getCapacidad();
             if (capacidadConsumida < capacidad) { // Si hay plazas disponibles
-                reservas.get(Constantes.Viajes.values()[viaje]).add(reserva);
+                reservas.get(Constantes.Estancias.values()[estancia]).add(reserva);
                 return true;
             } else {
                 return false;

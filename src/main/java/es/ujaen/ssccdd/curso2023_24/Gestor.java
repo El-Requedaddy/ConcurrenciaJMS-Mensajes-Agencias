@@ -1,9 +1,7 @@
 package es.ujaen.ssccdd.curso2023_24;
-import javax.jms.*;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import javax.jms.*;
+import java.util.concurrent.*;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,88 +16,80 @@ public class Gestor implements Runnable, Constantes {
     private MessageProducer producer;
     private final ExecutorService ejecucion;
     private final List<Future<?>> listaTareas;
+    private final CountDownLatch finControlador;
+    private Resultado resultado;
 
-
-
-    public Gestor() throws JMSException {
+    public Gestor(Resultado resultado, CountDownLatch finControlador) throws JMSException {
         ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory(ActiveMQConnection.DEFAULT_BROKER_URL);
         connection = connectionFactory.createConnection();
         session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+        this.finControlador = finControlador;
 
         Destination destination = session.createQueue(DESTINO);
         consumer = session.createConsumer(destination);
         producer = session.createProducer(destination);
         this.ejecucion = Executors.newCachedThreadPool();
-        this.listaTareas = new ArrayList();
+        this.listaTareas = new ArrayList<>();
+        this.resultado = resultado;
 
         connection.start();
     }
 
+    @Override
     public void run() {
-        for (Servicio servicioAgencia: SERVICIOS_AGENCIA) {
-            switch (servicioAgencia) {
-                case RESERVA_VIAJE:
-                    String queueFinal = DESTINO_RESERVA_VIAJE;
-                    ReservaViaje reservaViaje = null;
-                    try {
-                        reservaViaje = new ReservaViaje(queueFinal);
-                    } catch (JMSException e) {
-                        throw new RuntimeException(e);
-                    }
-                    listaTareas.add(ejecucion.submit(reservaViaje));
-                    break;
-                case RESERVA_ESTANCIA:
-                    String queueFinal2 = DESTINO_RESERVA_ESTANCIA;
-                    ReservaEstancia reservaEstancia = new ReservaEstancia(queueFinal2);
-                    listaTareas.add(ejecucion.submit(reservaEstancia));
-                    break;
+        try {
+            for (Servicio servicioAgencia : SERVICIOS_AGENCIA) {
+                switch (servicioAgencia) {
+                    case RESERVA_VIAJE:
+                        String queueFinal = DESTINO_RESERVA_VIAJE;
+                        ReservaViaje reservaViaje = new ReservaViaje(queueFinal, resultado);
+                        listaTareas.add(ejecucion.submit(reservaViaje));
+                        break;
+                    case RESERVA_ESTANCIA:
+                        String queueFinal2 = DESTINO_RESERVA_ESTANCIA;
+                        ReservaEstancia reservaEstancia = new ReservaEstancia(queueFinal2, resultado);
+                        listaTareas.add(ejecucion.submit(reservaEstancia));
+                        break;
+                }
             }
+
+            // Esperar a que se complete el CountDownLatch
+            finControlador.await();
+
+        } catch (InterruptedException | JMSException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            // Se solicita la finalización de las tareas de control
+            for (Future<?> tarea : listaTareas) {
+                tarea.cancel(true);
+            }
+
+            ejecucion.shutdown();
+            try {
+                if (!ejecucion.awaitTermination(TIEMPO_ESPERA_FINALIZACION, TimeUnit.MILLISECONDS)) {
+                    ejecucion.shutdownNow();
+                }
+            } catch (InterruptedException ex) {
+                ejecucion.shutdownNow();
+                Thread.currentThread().interrupt(); // Restaurar el estado de interrupción
+            }
+            close(); // Cerrar recursos JMS
         }
-        while (!finTarea()) {
+    }
+
+    private void close() {
+        try {
+            if (consumer != null) {
+                consumer.close();
+            }
+            if (session != null) {
+                session.close();
+            }
+            if (connection != null) {
+                connection.close();
+            }
+        } catch (JMSException e) {
+            e.printStackTrace();
         }
-    }
-
-    private boolean finTarea() {
-        return false; // lógica para determinar si la tarea ha terminado
-    }
-
-    private void reservarViaje(String reserva) {
-        // lógica para reservar viaje
-        System.out.println("Reserva de viaje: " + reserva);
-    }
-
-    private void reservarEstancia(String reserva) {
-        // lógica para reservar estancia
-        System.out.println("Reserva de estancia: " + reserva);
-    }
-
-    private void efectuarPago(String pago) {
-        // lógica para efectuar pago
-        System.out.println("Efectuar pago: " + pago);
-    }
-
-    private void cancelarReserva(String reserva) {
-        // lógica para cancelar reserva
-        System.out.println("Cancelar reserva: " + reserva);
-    }
-
-    private boolean reservaExiste(String reservaId) {
-        return true; // lógica para verificar si la reserva existe
-    }
-
-    private boolean reservaPagadaConCancelacion(String reservaId) {
-        return true; // lógica para verificar si la reserva está pagada con cancelación
-    }
-
-    private void sendRespuestaDisponibilidad(String consulta, boolean disponible) throws JMSException {
-        TextMessage response = session.createTextMessage(consulta);
-        response.setBooleanProperty("respuestaDisponibilidad", disponible);
-        response.setStringProperty("tipo", "respuestaDisponibilidad");
-        producer.send(response);
-    }
-
-    private boolean consultarDisponibilidad() {
-        // lógica para consultar disponibilidad
-        return true;
     }
 }

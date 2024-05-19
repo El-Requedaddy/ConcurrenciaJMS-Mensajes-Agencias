@@ -12,6 +12,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class ReservaViaje implements Runnable, Constantes{
+    Resultado resultado;
     private final String queue;
     private ActiveMQConnectionFactory connectionFactory;
     private Connection connection;
@@ -24,11 +25,15 @@ public class ReservaViaje implements Runnable, Constantes{
     Deque<String> colaPagoCancelacion;
     ExecutorService executor;
     HashMap<Constantes.Viajes, List<Reserva>> reservasEEDD;
+
+    // Mensajería y buffers
     MessageConsumer consumer;
     MessageConsumer consumerCancelacion;
+    private MessageProducer producerConsultaDisponibilidadViaje;
+    private MessageProducer producerConsultaDisponibilidadEstancia;
     Lock lock;
 
-    public ReservaViaje(String queue) throws JMSException {
+    public ReservaViaje(String queue, Resultado resultado) throws JMSException {
         this.queue = queue;
         this.colaReserva = new LinkedList<>();
         this.colaCancelacion = new LinkedList<>();
@@ -43,6 +48,18 @@ public class ReservaViaje implements Runnable, Constantes{
         reservasEEDD.put(Viajes.VIAJE3, new ArrayList<>());
         reservasEEDD.put(Viajes.VIAJE4, new ArrayList<>());
         reservasEEDD.put(Viajes.VIAJE5, new ArrayList<>());
+
+        ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory(ActiveMQConnection.DEFAULT_BROKER_URL);
+        connection = connectionFactory.createConnection();
+        session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+
+        Destination destinationCancelacionReservaViaje = session.createTopic(DESTINO_RESPUESTA_CONSULTA_DISPONIBILIDAD_VIAJE);
+        producerConsultaDisponibilidadViaje = session.createProducer(destinationCancelacionReservaViaje);
+
+        Destination destinationCancelacionReservaEstancia = session.createTopic(DESTINO_RESPUESTA_CONSULTA_DISPONIBILIDAD_ESTANCIA);
+        producerConsultaDisponibilidadEstancia = session.createProducer(destinationCancelacionReservaEstancia);
+
+        connection.start();
     }
 
     @Override
@@ -70,6 +87,9 @@ public class ReservaViaje implements Runnable, Constantes{
     public void after() {
         try {
             if (connection != null) {
+                resultado.addReservaViaje(reservasEEDD);
+                executor.shutdown();
+                consumer.close();
                 connection.close();
             }
         } catch (Exception ex) {
@@ -101,7 +121,7 @@ public class ReservaViaje implements Runnable, Constantes{
         connection.start();
 
 
-        while (true) {
+        while (!Thread.currentThread().isInterrupted()) {
             synchronized (colaReserva) {
                 procesarMensaje(colaReserva, "Reserva");
             }
@@ -117,9 +137,15 @@ public class ReservaViaje implements Runnable, Constantes{
             synchronized (colaPagoCancelacion) {
                 procesarMensaje(colaPagoCancelacion, "PagoCancelacion");
             }
+
         }
 
-
+        executor.shutdown();
+        consumer.close();
+        consumerCancelacion.close();
+        consumerPago.close();
+        consumerPagoCancelacion.close();
+        consumerConsulta.close();
 
     }
     private void procesarMensaje(Deque<String> cola, String tipoPeticion) throws JMSException, InterruptedException {
@@ -174,6 +200,7 @@ public class ReservaViaje implements Runnable, Constantes{
                 break;
             case "Consulta":
                 System.out.println("Consulta de disponibilidad: ");
+                consultarDisponibilidad(peticionAProcesar);
                 break;
             case "Pago":
                 System.out.println("Pago básico: ");
@@ -201,8 +228,42 @@ public class ReservaViaje implements Runnable, Constantes{
         String viaje = partes[3];
         String codigoReserva = UUID.randomUUID().toString();
 
-        TareaReservaViaje tarea = new TareaReservaViaje(codigoReserva, tipoCliente, idCliente, reservasEEDD, viaje);
+        TareaReservaViaje tarea = new TareaReservaViaje(codigoReserva, tipoCliente, idCliente, reservasEEDD, viaje, lock);
         executor.submit(tarea); // creo una tarea para reservar el viaje
+
+    }
+
+    private void consultarDisponibilidad(String cadena) {
+        String[] partes = cadena.split("_");
+
+        String tipoCliente = partes[0];
+        String tipoPeticion = partes[1];
+        String idCliente = partes[2];
+        int viaje = Integer.parseInt(partes[3]);
+        executor.submit(() -> {
+            lock.lock(); // bloquear
+            try {
+                Constantes.Viajes c = Constantes.Viajes.values()[viaje];
+                int capacidadConsumida = reservasEEDD.get(Constantes.Viajes.values()[viaje]).size();
+                int capacidad = Constantes.Viajes.values()[viaje].getCapacidad();
+                if (capacidadConsumida < capacidad) { // Si hay plazas disponibles
+                    TextMessage message = session.createTextMessage("true");
+                    message.setStringProperty("tipo", "respuestaDisponibilidad");
+                    producerConsultaDisponibilidadEstancia.send(message);
+                    return true;
+                } else {
+                    TextMessage message = session.createTextMessage("false");
+                    message.setStringProperty("tipo", "respuestaDisponibilidad");
+                    producerConsultaDisponibilidadEstancia.send(message);
+                    return false;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                return false;
+            } finally {
+                lock.unlock(); // desbloquear
+            }
+        });
 
     }
 

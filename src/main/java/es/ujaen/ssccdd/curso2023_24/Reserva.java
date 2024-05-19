@@ -4,9 +4,6 @@ public class Reserva {
     private String codigoReserva;
     private String tipoCliente;
     private String idCliente;
-
-
-
     private boolean conCancelacion;
 
     public Reserva(String codigoReserva, String tipoCliente, String idCliente) {

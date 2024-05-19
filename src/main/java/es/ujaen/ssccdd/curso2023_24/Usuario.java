@@ -17,6 +17,8 @@ public class Usuario implements Runnable, Constantes {
     private MessageConsumer consumer;
     private MessageConsumer consumerReservaViaje;
     private MessageConsumer consumerReservaEstancia;
+    private MessageConsumer consumerRespuestaDisponibilidadViaje;
+    private MessageConsumer consumerRespuestaDisponibilidadEstancia;
     private MessageProducer producerReservaViaje;
     private MessageProducer producerReservaEstancia;
     private MessageProducer producerConsultaDisponibilidadViaje;
@@ -32,6 +34,8 @@ public class Usuario implements Runnable, Constantes {
 
         consumerReservaEstancia = session.createConsumer(session.createTopic(DESTINO_CONSULTA_DISPONIBILIDAD_ESTANCIA));
         consumerReservaViaje = session.createConsumer(session.createTopic(DESTINO_CONSULTA_DISPONIBILIDAD_VIAJE));
+        consumerRespuestaDisponibilidadEstancia = session.createConsumer(session.createTopic(DESTINO_RESPUESTA_CONSULTA_DISPONIBILIDAD_ESTANCIA));
+        consumerRespuestaDisponibilidadViaje = session.createConsumer(session.createTopic(DESTINO_RESPUESTA_CONSULTA_DISPONIBILIDAD_VIAJE));
 
         Destination destinationReservaViaje = session.createTopic(DESTINO_RESERVA_VIAJE);
         producerReservaViaje = session.createProducer(destinationReservaViaje);
@@ -50,32 +54,31 @@ public class Usuario implements Runnable, Constantes {
 
     public void run() {
 
-        while (!finTarea() && !Thread.currentThread().isInterrupted()) {
+        while (!Thread.currentThread().isInterrupted()) {
             if (quiereReservarViaje()) {
                 executorService.submit(() -> { // Un hilo espera a la respuesta
                     try {
-                        sendReservaViaje("Usuario_Reserva_" + iD + "_" + Constantes.generarViajeAleatorio());
                         sendConsultaDisponibilidadViaje("Usuario_Reserva_" + iD + "_" + Constantes.generarViajeAleatorio());
-                        Message message = consumerReservaViaje.receive();
+                        Message message = consumerRespuestaDisponibilidadViaje.receive();
                         System.out.println("Usuario: Recibida respuesta de disponibilidad de viaje");
                         if (message instanceof TextMessage && message.getBooleanProperty("respuestaDisponibilidad")) {
                             sendReservaViaje("reservaViaje");
                         }
                     } catch (JMSException | InterruptedException e) {
-                        throw new RuntimeException(e);
+                        Thread.currentThread().interrupt();
                     }
                 });
             } else if (quiereReservarEstancia()) {
                 executorService.submit(() -> {
                     try {
-                        sendConsultaDisponibilidadEstancia(iD + "_" + Constantes.generarEstanciaAleatoria());
-                        Message message = consumerReservaEstancia.receive();
+                        sendConsultaDisponibilidadEstancia("Usuario_Reserva_" + iD + "_" + Constantes.generarEstanciaAleatoria());
+                        Message message = consumerRespuestaDisponibilidadEstancia.receive();
                         System.out.println("Usuario: Recibida respuesta de disponibilidad de estancia");
                         if (message instanceof TextMessage && message.getBooleanProperty("respuestaDisponibilidad")) {
                             sendReservaEstancia("reservaViaje");
                         }
                     } catch (JMSException | InterruptedException e) {
-                        throw new RuntimeException(e);
+                        Thread.currentThread().interrupt();
                     }
                 });
             } else if (quiereCancelarReserva()) {
@@ -92,8 +95,9 @@ public class Usuario implements Runnable, Constantes {
             try {
                 TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_USUARIO);
             } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+                Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
             }
+
         }
 
         executorService.shutdown();
@@ -124,7 +128,11 @@ public class Usuario implements Runnable, Constantes {
         message.setStringProperty("tipo", "reservaViajeUsuario");
         producerReservaViaje.send(message);
         System.out.println("Agencia: Reserva de viaje enviada");
-        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        try {
+            TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
+        }
     }
 
     private void sendReservaEstancia(String reserva) throws JMSException, InterruptedException{
@@ -132,7 +140,11 @@ public class Usuario implements Runnable, Constantes {
         message.setStringProperty("tipo", "reservaEstanciaAgencia");
         producerReservaEstancia.send(message);
         System.out.println("Usuario: Reserva de estancia enviada");
-        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        try {
+            TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
+        }
     }
 
     private void sendConsultaDisponibilidadViaje(String consulta) throws JMSException, InterruptedException {
@@ -140,7 +152,11 @@ public class Usuario implements Runnable, Constantes {
         message.setStringProperty("tipo", "consultaDisponibilidad");
         producerConsultaDisponibilidadViaje.send(message);
         System.out.println("Usuario: Reserva de viaje enviada");
-        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        try {
+            TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
+        }
     }
 
     private void sendConsultaDisponibilidadEstancia(String consulta) throws JMSException, InterruptedException {
@@ -148,7 +164,11 @@ public class Usuario implements Runnable, Constantes {
         message.setStringProperty("tipo", "consultaDisponibilidad");
         producerConsultaDisponibilidadEstancia.send(message);
         System.out.println("Usuario: Reserva de estancia enviada");
-        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        try {
+            TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Restaurar el estado interrumpido
+        }
     }
 
     private void sendPagoBasico(String pago) throws JMSException {
