@@ -4,59 +4,98 @@ import javax.jms.*;
 import org.apache.activemq.ActiveMQConnection;
 import org.apache.activemq.ActiveMQConnectionFactory;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
 public class Usuario implements Runnable, Constantes {
 
+    private final String iD;
     private Connection connection;
     private Session session;
     private MessageProducer producer;
     private MessageConsumer consumer;
-    private int id;
+    private MessageConsumer consumerReservaViaje;
+    private MessageConsumer consumerReservaEstancia;
+    private MessageProducer producerReservaViaje;
+    private MessageProducer producerReservaEstancia;
+    private MessageProducer producerConsultaDisponibilidadViaje;
+    private MessageProducer producerConsultaDisponibilidadEstancia;
+    private ExecutorService executorService;
 
     public Usuario(int id) throws JMSException {
-        this.id = id;
+        this.iD = String.valueOf(id);
+        executorService = Executors.newFixedThreadPool(10);
         ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory(ActiveMQConnection.DEFAULT_BROKER_URL);
         connection = connectionFactory.createConnection();
         session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
 
-        Destination destination = session.createQueue(DESTINO);
-        producer = session.createProducer(destination);
-        consumer = session.createConsumer(destination);
+        consumerReservaEstancia = session.createConsumer(session.createTopic(DESTINO_CONSULTA_DISPONIBILIDAD_ESTANCIA));
+        consumerReservaViaje = session.createConsumer(session.createTopic(DESTINO_CONSULTA_DISPONIBILIDAD_VIAJE));
+
+        Destination destinationReservaViaje = session.createTopic(DESTINO_RESERVA_VIAJE);
+        producerReservaViaje = session.createProducer(destinationReservaViaje);
+
+        Destination destinationReservaEstancia = session.createTopic(DESTINO_RESERVA_ESTANCIA);
+        producerReservaEstancia = session.createProducer(destinationReservaEstancia);
+
+        Destination destinationConsultaDisponibilidadViaje = session.createTopic(DESTINO_CONSULTA_DISPONIBILIDAD_VIAJE);
+        producerConsultaDisponibilidadViaje = session.createProducer(destinationConsultaDisponibilidadViaje);
+
+        Destination destinationConsultaDisponibilidadEstancia = session.createTopic(DESTINO_CONSULTA_DISPONIBILIDAD_ESTANCIA);
+        producerConsultaDisponibilidadEstancia = session.createProducer(destinationConsultaDisponibilidadEstancia);
 
         connection.start();
     }
 
     public void run() {
-        try {
-            while (!finTarea()) {
-                if (quiereReservarViaje()) {
-                    sendConsultaDisponibilidad("consultaViaje");
-                    Message message = consumer.receive();
-                    if (message instanceof TextMessage && message.getBooleanProperty("respuestaDisponibilidad")) {
-                        sendReservaViaje("reservaViaje");
-                        if (quierePagoConCancelacion()) {
-                            sendPagoConCancelacion("pagoConCancelacion");
-                        } else {
-                            sendPagoBasico("pagoBasico");
+
+        while (!finTarea() && !Thread.currentThread().isInterrupted()) {
+            if (quiereReservarViaje()) {
+                executorService.submit(() -> { // Un hilo espera a la respuesta
+                    try {
+                        sendConsultaDisponibilidadViaje(iD + "_" + Constantes.generarViajeAleatorio());
+                        Message message = consumerReservaViaje.receive();
+                        System.out.println("Usuario: Recibida respuesta de disponibilidad de viaje");
+                        if (message instanceof TextMessage && message.getBooleanProperty("respuestaDisponibilidad")) {
+                            sendReservaViaje("reservaViaje");
                         }
+                    } catch (JMSException | InterruptedException e) {
+                        throw new RuntimeException(e);
                     }
-                } else if (quiereReservarEstancia()) {
-                    sendConsultaDisponibilidad("consultaEstancia");
-                    Message message = consumer.receive();
-                    if (message instanceof TextMessage && message.getBooleanProperty("respuestaDisponibilidad")) {
-                        sendReservaEstancia("reservaEstancia");
-                        if (quierePagoConCancelacion()) {
-                            sendPagoConCancelacion("pagoConCancelacion");
-                        } else {
-                            sendPagoBasico("pagoBasico");
+                });
+            } else if (quiereReservarEstancia()) {
+                executorService.submit(() -> {
+                    try {
+                        sendConsultaDisponibilidadEstancia(iD + "_" + Constantes.generarEstanciaAleatoria());
+                        Message message = consumerReservaEstancia.receive();
+                        System.out.println("Usuario: Recibida respuesta de disponibilidad de estancia");
+                        if (message instanceof TextMessage && message.getBooleanProperty("respuestaDisponibilidad")) {
+                            sendReservaEstancia("reservaViaje");
                         }
+                    } catch (JMSException | InterruptedException e) {
+                        throw new RuntimeException(e);
                     }
-                } else if (quiereCancelarReserva()) {
-                    sendCancelacionReserva("cancelacionReserva");
-                }
+                });
+            } else if (quiereCancelarReserva()) {
+                executorService.submit(() -> {
+                    try {
+                        sendCancelacionReserva("usuario_" + iD + "_" + Constantes.getTipoCancelacionAleatorio());
+                    } catch (JMSException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
             }
-        } catch (JMSException e) {
-            e.printStackTrace();
+
+            // Simulamos tiempo de espera para volver a realizar consultas
+            try {
+                TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_USUARIO);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         }
+
+        executorService.shutdown();
     }
 
     private boolean finTarea() {
@@ -68,7 +107,7 @@ public class Usuario implements Runnable, Constantes {
     }
 
     private boolean quiereReservarEstancia() {
-        return false; // lógica para determinar si quiere reservar una estancia
+        return true; // lógica para determinar si quiere reservar una estancia
     }
 
     private boolean quiereCancelarReserva() {
@@ -79,22 +118,36 @@ public class Usuario implements Runnable, Constantes {
         return false; // lógica para determinar si quiere pago con cancelación
     }
 
-    private void sendConsultaDisponibilidad(String consulta) throws JMSException {
+    private void sendReservaViaje(String reserva) throws JMSException, InterruptedException {
+        TextMessage message = session.createTextMessage(reserva);
+        message.setStringProperty("tipo", "reservaViajeAgencia");
+        producerReservaViaje.send(message);
+        System.out.println("Agencia: Reserva de viaje enviada");
+        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+    }
+
+    private void sendReservaEstancia(String reserva) throws JMSException, InterruptedException{
+        TextMessage message = session.createTextMessage(reserva);
+        message.setStringProperty("tipo", "reservaEstanciaAgencia");
+        producerReservaEstancia.send(message);
+        System.out.println("Usuario: Reserva de estancia enviada");
+        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
+    }
+
+    private void sendConsultaDisponibilidadViaje(String consulta) throws JMSException, InterruptedException {
         TextMessage message = session.createTextMessage(consulta);
         message.setStringProperty("tipo", "consultaDisponibilidad");
-        producer.send(message);
+        producerConsultaDisponibilidadViaje.send(message);
+        System.out.println("Usuario: Reserva de viaje enviada");
+        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
     }
 
-    private void sendReservaViaje(String reserva) throws JMSException {
-        TextMessage message = session.createTextMessage(reserva);
-        message.setStringProperty("tipo", "reservaViaje");
-        producer.send(message);
-    }
-
-    private void sendReservaEstancia(String reserva) throws JMSException {
-        TextMessage message = session.createTextMessage(reserva);
-        message.setStringProperty("tipo", "reservaEstancia");
-        producer.send(message);
+    private void sendConsultaDisponibilidadEstancia(String consulta) throws JMSException, InterruptedException {
+        TextMessage message = session.createTextMessage(consulta);
+        message.setStringProperty("tipo", "consultaDisponibilidad");
+        producerConsultaDisponibilidadEstancia.send(message);
+        System.out.println("Usuario: Reserva de estancia enviada");
+        TimeUnit.MILLISECONDS.sleep(TIEMPO_ESPERA_SOLICITUD);
     }
 
     private void sendPagoBasico(String pago) throws JMSException {

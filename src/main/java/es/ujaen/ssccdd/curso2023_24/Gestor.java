@@ -40,7 +40,7 @@ public class Gestor implements Runnable, Constantes {
             switch (servicioAgencia) {
                 case RESERVA_VIAJE:
                     String queueFinal = DESTINO_RESERVA_VIAJE;
-                    ReservaEstancia reservaViaje = new ReservaEstancia(queueFinal);
+                    ReservaViaje reservaViaje = new ReservaViaje(queueFinal);
                     listaTareas.add(ejecucion.submit(reservaViaje));
                     break;
                 case RESERVA_ESTANCIA:

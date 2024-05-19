@@ -2,13 +2,14 @@ package es.ujaen.ssccdd.curso2023_24;
 
 import org.apache.activemq.ActiveMQConnection;
 import org.apache.activemq.ActiveMQConnectionFactory;
+import org.apache.camel.Producer;
 
 import javax.jms.*;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class ReservaViaje implements Runnable{
+public class ReservaViaje implements Runnable, Constantes{
     private final String queue;
     private ActiveMQConnectionFactory connectionFactory;
     private Connection connection;
@@ -70,30 +71,35 @@ public class ReservaViaje implements Runnable{
         String peticionAProcesar="";
         Iterator<String> iterator = cola.iterator();
 
-        while (iterator.hasNext() && i < 5) { // Procesamos los 5 primeros mensajes en búsqueda de petición de Agencia
-            String mensajeActual = iterator.next(); // iterrar sobre la cola
-            ComprobarReserva(mensajeActual, tipoCliente, tipoPeticion);// Obtengo el tipo de cliente y el tipo de petición
-            if(tipoCliente == "Agencia") {
-                peticionAProcesar = mensajeActual;
-                procesado = true;
-                i = 5;
-               iterator.remove(); // elimino la petición de la cola
+        if (!cola.isEmpty()) {
+            System.out.println("Mensajes en la cola: " + cola.size());
+            while (i < 5) { // Procesamos los 5 primeros mensajes en búsqueda de petición de Agencia
+                if (!iterator.hasNext()) {
+                    break;
+                }
+                String mensajeActual = iterator.next(); // iterar sobre la cola
+                ComprobarReserva(mensajeActual, tipoCliente, tipoPeticion);// Obtengo el tipo de cliente y el tipo de petición
+                if (tipoCliente == "Agencia") {
+                    peticionAProcesar = mensajeActual;
+                    procesado = true;
+                    i = 5;
+                    iterator.remove(); // elimino la petición de la cola
+                }
+                System.out.println("Mensaje recibido: " + mensajeActual);
+                i++;
             }
-            System.out.println("Mensaje recibido: " + mensajeActual);
-            i++;
-        }
 
-        if (!procesado) { // Si no se ha encontrado petición de Agencia, se procesa el primer mensaje
-            peticionAProcesar = cola.peek();
-            cola.pop();
-            procesado = false;
-            i = 0;
-        }
+            if (!procesado) { // Si no se ha encontrado petición de Agencia, se procesa el primer mensaje
+                peticionAProcesar = cola.peek();
+                cola.pop();
+                procesado = false;
+                i = 0;
+            }
 
-        if (peticionAProcesar != "")
-            procesarPeticion(peticionAProcesar);
-        else
-            System.out.println("No hay mensajes en la cola");
+            if (peticionAProcesar != "")
+                procesarPeticion(peticionAProcesar);
+            else
+                System.out.println("No hay mensajes en la cola");
 
         /*
         // Se confirma el acceso al puente
@@ -102,9 +108,10 @@ public class ReservaViaje implements Runnable{
         msg = session.createTextMessage(gsonUtil.encode(coche, MsgCoche.class));
         producer.send(msg);
         producer.close();*/
+        }
     }
 
-    private void procesarPeticion(String peticionAProcesar) {
+    private void procesarPeticion(String peticionAProcesar) throws JMSException {
         String tipoPeticion = "", tipoCliente = "";
         if (peticionAProcesar != "") {
             ComprobarReserva(peticionAProcesar, tipoCliente, tipoPeticion);
@@ -116,7 +123,7 @@ public class ReservaViaje implements Runnable{
                     //cancelarReserva(peticionAProcesar);
                     break;
                 case "Consulta":
-                    //consultarDisponibilidad(peticionAProcesar);
+
                     break;
                 case "Pago":
                     //efectuarPago(peticionAProcesar);
